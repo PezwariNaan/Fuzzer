@@ -1,36 +1,24 @@
 use std::time::Duration;
-use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct IpApi {
-    origin: String,
-}
+use reqwest::header::{USER_AGENT};
+use reqwest::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, HeaderValue::from_static("rust-reqwest/boilerplate"));
+    let url = "https://httpbin.org/get";
 
     let client = reqwest::Client::builder()
-        .default_headers(headers)
         .timeout(Duration::from_secs(10))
         .build()?;
-    
-    let text = client
-        .get("https://testing.com")
- //       .query(None)
+
+    let resp = client
+        .get(url)
+        .header(USER_AGENT, "hello-there")
         .send()
-        .await?
-        .text()
         .await?;
-    
-    let ip_info: IpApi = client
-        .get("https://testing.com")
-        .send()
-        .await?
-        .json()
-        .await?;
+
+    let body = resp.text().await?;
+
+    println!("{:?}", body);
 
     Ok(())
 }
