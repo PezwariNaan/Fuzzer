@@ -1,0 +1,12 @@
+.bash_history
+.bashrc
+.cache
+.config
+.cvs
+.cvsignore
+.env
+.forward
+.git
+.git-rewrite
+admin
+wp
