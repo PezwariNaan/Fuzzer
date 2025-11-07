@@ -2,6 +2,7 @@ use reqwest::header::{USER_AGENT};
 use reqwest::{Client, StatusCode};
 use std::{fs, io, time::Duration, error::Error};
 use futures::stream::{self, StreamExt};
+use clap::Parser;
 
 struct Fuzzer {
     client   : Client, 
@@ -9,10 +10,20 @@ struct Fuzzer {
     base_url : String,
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = "Simple Fuzzer Writen In Rust.")]
+struct Args {
+    #[arg(short, long)]
+    wordlist: String,
+
+    #[arg(short, long)]
+    url: String,
+}
+
 impl Fuzzer {
     pub fn new(base_url: &str) -> Result<Self, Box<dyn Error>> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
             .build()?;
 
         Ok(Self {
@@ -30,7 +41,7 @@ impl Fuzzer {
             .filter(|s| !s.is_empty())
             .collect();
         self.word_list = lines;
-        
+
         Ok(())
     }
 
@@ -45,7 +56,7 @@ impl Fuzzer {
         let response = self
             .client
             .get(&url)
-            .header(USER_AGENT, "hello-there")
+            .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0")
             .send()
             .await?;
 
@@ -55,9 +66,10 @@ impl Fuzzer {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut fuzzer = Fuzzer::new("https://httpbin.org")?;
+    let args = Args::parse();
+    let mut fuzzer = Fuzzer::new(&args.url)?;
 
-    fuzzer.load_wordlist("test_wordlist.txt")?;
+    fuzzer.load_wordlist(&args.wordlist)?;
     println!("Loaded {} words", fuzzer.word_list.len());
 
     let concurrency: usize = 20;
