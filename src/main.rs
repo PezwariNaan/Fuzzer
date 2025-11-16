@@ -1,8 +1,18 @@
-use reqwest::header::{USER_AGENT};
-use reqwest::{Client, StatusCode};
-use std::{fs, io, time::Duration, error::Error};
-use futures::stream::{self, StreamExt};
+use std::{
+    error::Error,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    time::Duration,
+};
+
 use clap::Parser;
+use colored::*;
+use futures::stream::{self, StreamExt};
+use reqwest::{
+    header::USER_AGENT,
+    Client,
+    StatusCode,
+};
 
 struct Fuzzer {
     client   : Client, 
@@ -18,6 +28,9 @@ struct Args {
 
     #[arg(short, long)]
     url: String,
+
+    #[arg(short, long)]
+    save_file: Option<String>,
 }
 
 impl Fuzzer {
@@ -41,6 +54,17 @@ impl Fuzzer {
             .filter(|s| !s.is_empty())
             .collect();
         self.word_list = lines;
+
+        Ok(())
+    }
+
+    pub fn save_results(file_path: &str, path: &str, status: StatusCode) -> Result<(), Box<dyn Error>> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(file_path)?;
+
+        writeln!(file, "{:<26} -> {:>5}", path, status.as_u16())?;
 
         Ok(())
     }
@@ -70,7 +94,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut fuzzer = Fuzzer::new(&args.url)?;
 
     fuzzer.load_wordlist(&args.wordlist)?;
-    println!("Loaded {} words", fuzzer.word_list.len());
+
+    let count = fuzzer.word_list.len();
+
+    println!("{}", format!("Loaded {} words", count).bold());
 
     let concurrency: usize = 20;
     
@@ -82,9 +109,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fetches = stream::iter(paths.into_iter().map(|path| {
         let fuzzer_ref = &fuzzer;
+        let save_path = args.save_file.clone();
         async move {
             match fuzzer_ref.make_request(&path).await {
-                Ok(status) => println!("{} -> {}", path, status),
+                Ok(status) => { 
+                    let code = status.as_u16();
+
+                    let colored_status = if code >= 200 && code < 300 {
+                        status.to_string().green().bold()
+                    } else if code >= 300 && code < 400 {
+                        status.to_string().yellow() 
+                    } else if code >= 400 && code < 500 {
+                        status.to_string().red()
+                    } else if code >= 500 {
+                        status.to_string().bright_red()
+                    } else {
+                        status.to_string().white()
+                    };
+
+                    println!("{:<25} -> {:>5}", path, colored_status);
+                    if let Some(ref save_file_path) = save_path {
+                        if let Err(e) = Fuzzer::save_results(save_file_path, &path, status) {
+                            println!("Failed to save result: {}", e);
+                        }
+                    }
+                },
                 Err(e) => eprintln!("request {} failed: {}", path, e), 
             }
         }
@@ -92,7 +141,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .buffer_unordered(concurrency);
 
     fetches.for_each(|_| async {}).await;
-    
 
     Ok(())
 }

@@ -10,3 +10,4 @@
 .git-rewrite
 admin
 wp
+index.html
